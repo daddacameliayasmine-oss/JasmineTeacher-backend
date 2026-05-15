@@ -1,5 +1,6 @@
 import { Router } from "express";
 import authRouter from "./modules/auth/authRoutes.js";
+import bookingsRouter from "./modules/bookings/bookingsRoutes.js";
 import coursesRouter from "./modules/courses/coursesRoutes.js";
 import itemsRouter from "./modules/items/itemsRoutes.js";
 
@@ -13,6 +14,7 @@ router.get("/health", (_req, res) => {
 
 router.use("/auth", authRouter);
 router.use("/courses", coursesRouter);
+router.use("/bookings", bookingsRouter);
 
 // Module d'exemple (à supprimer une fois les vrais modules en place).
 router.use("/items", itemsRouter);
