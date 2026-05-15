@@ -40,3 +40,17 @@ CREATE TABLE IF NOT EXISTS courses (
   created_by INT NOT NULL,
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 );
+
+-- Réservations : lien entre un élève (user) et un cours.
+-- Une même paire (user, course) ne peut exister qu'une fois (anti-doublon).
+-- pending = créée mais pas encore payée, confirmed = payée, cancelled = annulée par l'élève.
+CREATE TABLE IF NOT EXISTS bookings (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  course_id INT NOT NULL,
+  status ENUM('pending', 'confirmed', 'cancelled') NOT NULL DEFAULT 'pending',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_user_course (user_id, course_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
