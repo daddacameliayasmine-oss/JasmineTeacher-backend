@@ -24,3 +24,19 @@ CREATE TABLE IF NOT EXISTS users (
   role ENUM('student', 'admin') NOT NULL DEFAULT 'student',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Cours / sessions proposées par Jasmine.
+-- 4 types prévus selon la grille tarifaire (cf. wireframe "Découvrir les cours").
+CREATE TABLE IF NOT EXISTS courses (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  title VARCHAR(200) NOT NULL,
+  description TEXT,
+  type ENUM('collectif', 'individuel', 'enfant_collectif', 'enfant_individuel') NOT NULL,
+  price DECIMAL(6, 2) NOT NULL,
+  capacity INT NOT NULL DEFAULT 10,
+  start_at DATETIME NOT NULL,
+  duration_minutes INT NOT NULL DEFAULT 60,
+  visio_url VARCHAR(500),
+  created_by INT NOT NULL,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+);

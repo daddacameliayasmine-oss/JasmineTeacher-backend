@@ -1,5 +1,6 @@
 import { Router } from "express";
 import authRouter from "./modules/auth/authRoutes.js";
+import coursesRouter from "./modules/courses/coursesRoutes.js";
 import itemsRouter from "./modules/items/itemsRoutes.js";
 
 // Routeur principal de l'API. Chaque module enregistre son sous-routeur ici.
@@ -11,6 +12,7 @@ router.get("/health", (_req, res) => {
 });
 
 router.use("/auth", authRouter);
+router.use("/courses", coursesRouter);
 
 // Module d'exemple (à supprimer une fois les vrais modules en place).
 router.use("/items", itemsRouter);
