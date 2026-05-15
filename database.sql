@@ -54,3 +54,14 @@ CREATE TABLE IF NOT EXISTS bookings (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
 );
+
+-- Vidéos : démos publiques (visiteurs) ou contenus réservés (élèves connectés).
+-- is_public = TRUE → vitrine sur la page "Découvrir les cours".
+-- is_public = FALSE → accessibles seulement aux utilisateurs authentifiés.
+CREATE TABLE IF NOT EXISTS videos (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  title VARCHAR(200) NOT NULL,
+  url VARCHAR(500) NOT NULL,
+  is_public BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
