@@ -66,6 +66,15 @@ CREATE TABLE IF NOT EXISTS videos (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Messages envoyés depuis le formulaire de contact (visiteurs).
+-- L'email est optionnel pour ne pas bloquer si l'utilisateur n'est pas connecté.
+CREATE TABLE IF NOT EXISTS contact_messages (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  email VARCHAR(255),
+  message TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Paiements : trace de chaque transaction liée à une réservation.
 -- Une fois payé, le booking associé passe en "confirmed".
 -- Pour ce sprint, on utilise un mode "mock" (Stripe à brancher dans un sprint suivant).
