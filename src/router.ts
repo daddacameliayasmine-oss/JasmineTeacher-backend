@@ -1,4 +1,5 @@
 import { Router } from "express";
+import itemsRouter from "./modules/items/itemsRoutes.js";
 
 // Routeur principal de l'API. Chaque module enregistre son sous-routeur ici.
 const router = Router();
@@ -8,7 +9,7 @@ router.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
-// Les sous-routeurs des modules (auth, courses, bookings...) seront montés ici
-// au fur et à mesure de leur création.
+// Module d'exemple (à supprimer une fois les vrais modules en place).
+router.use("/items", itemsRouter);
 
 export default router;
