@@ -65,3 +65,15 @@ CREATE TABLE IF NOT EXISTS videos (
   is_public BOOLEAN NOT NULL DEFAULT TRUE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Paiements : trace de chaque transaction liée à une réservation.
+-- Une fois payé, le booking associé passe en "confirmed".
+-- Pour ce sprint, on utilise un mode "mock" (Stripe à brancher dans un sprint suivant).
+CREATE TABLE IF NOT EXISTS payments (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  booking_id INT NOT NULL,
+  amount DECIMAL(6, 2) NOT NULL,
+  status ENUM('pending', 'paid', 'refunded') NOT NULL DEFAULT 'pending',
+  paid_at DATETIME,
+  FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE
+);
