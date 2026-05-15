@@ -55,6 +55,27 @@ export const findByUserWithCourse = async (userId: number): Promise<BookingWithC
   return rows as BookingWithCourse[];
 };
 
+// Liste TOUTES les reservations avec les infos eleve + cours (admin).
+export type BookingFull = BookingWithCourse & {
+  user_firstname: string;
+  user_lastname: string;
+  user_email: string;
+};
+
+export const findAllWithDetails = async (): Promise<BookingFull[]> => {
+  const [rows] = await pool.query(
+    `SELECT b.*,
+            c.title AS course_title, c.start_at AS course_start_at,
+            c.price AS course_price, c.visio_url AS course_visio_url,
+            u.firstname AS user_firstname, u.lastname AS user_lastname, u.email AS user_email
+     FROM bookings b
+     JOIN courses c ON c.id = b.course_id
+     JOIN users u ON u.id = b.user_id
+     ORDER BY c.start_at DESC`,
+  );
+  return rows as BookingFull[];
+};
+
 export const findById = async (id: number): Promise<Booking | null> => {
   const [rows] = await pool.query("SELECT * FROM bookings WHERE id = ?", [id]);
   return (rows as Booking[])[0] ?? null;

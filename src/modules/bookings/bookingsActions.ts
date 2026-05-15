@@ -11,6 +11,12 @@ export const browseMine = async (req: Request, res: Response): Promise<void> => 
   res.json(bookings);
 };
 
+// GET /api/bookings/all — toutes les reservations avec details (admin uniquement).
+export const browseAll = async (_req: Request, res: Response): Promise<void> => {
+  const bookings = await bookingsRepository.findAllWithDetails();
+  res.json(bookings);
+};
+
 // POST /api/bookings — l'eleve reserve un cours.
 // Body attendu : { courseId: number }
 export const add = async (req: Request, res: Response): Promise<void> => {
