@@ -12,3 +12,15 @@ CREATE TABLE IF NOT EXISTS items (
   id INT PRIMARY KEY AUTO_INCREMENT,
   title VARCHAR(255) NOT NULL
 );
+
+-- Utilisateurs : visiteurs qui se transforment en élèves après inscription.
+-- Le rôle "admin" est réservé à Jasmine (à provisionner manuellement en BDD).
+CREATE TABLE IF NOT EXISTS users (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  lastname VARCHAR(100) NOT NULL,
+  firstname VARCHAR(100) NOT NULL,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role ENUM('student', 'admin') NOT NULL DEFAULT 'student',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
