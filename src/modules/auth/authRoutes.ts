@@ -1,13 +1,17 @@
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/authMiddleware.js";
+import { rateLimit } from "../../middlewares/rateLimiter.js";
 import * as authActions from "./authActions.js";
 import * as authRepository from "./authRepository.js";
 
 const authRouter = Router();
 
-// Routes publiques d'inscription et de connexion.
-authRouter.post("/register", authActions.register);
-authRouter.post("/login", authActions.login);
+// Rate limit anti brute-force : max 10 tentatives / IP / minute.
+const authLimiter = rateLimit({ windowMs: 60_000, max: 10 });
+
+// Routes publiques d'inscription et de connexion (limitees).
+authRouter.post("/register", authLimiter, authActions.register);
+authRouter.post("/login", authLimiter, authActions.login);
 
 // Route protegee : renvoie le profil de l'utilisateur connecte.
 // Permet au front de verifier la validite du token au chargement.
