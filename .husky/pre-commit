@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+
+# Pre-commit hook : vérifie le lint et la limite de 150 lignes par commit.
+
+# 1) Lint via Biome — bloque le commit si erreurs.
+npm run lint || {
+  echo "Lint en erreur — corrige avant de committer (npm run lint:fix)."
+  exit 1
+}
+
+# 2) Limite de 150 lignes modifiées (ajouts + suppressions),
+#    en excluant package-lock.json et les fichiers SVG.
+CHANGED=$(git diff --cached --numstat \
+  | grep -v "package-lock.json" \
+  | grep -v "\.svg$" \
+  | awk '{ added += $1; removed += $2 } END { print added + removed }')
+
+if [ "${CHANGED:-0}" -gt 150 ]; then
+  echo "Commit trop volumineux ($CHANGED lignes > 150 max)."
+  echo "Splitte en plusieurs commits logiques."
+  exit 1
+fi

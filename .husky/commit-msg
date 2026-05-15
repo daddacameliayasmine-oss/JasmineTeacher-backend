@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+
+# Commit-msg hook : impose le format Conventional Commits.
+# Format attendu : type(scope): description (description ≥ 10 caractères)
+
+MSG_FILE=$1
+MSG=$(head -n1 "$MSG_FILE")
+
+PATTERN='^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\([a-z0-9_-]+\))?: .{10,}$'
+
+if ! echo "$MSG" | grep -Eq "$PATTERN"; then
+  echo "Message de commit invalide."
+  echo "Format attendu : type(scope): description (description min 10 caracteres)"
+  echo "Exemple        : feat(auth): ajout de la route POST /login"
+  echo ""
+  echo "Types autorises : feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert"
+  exit 1
+fi
