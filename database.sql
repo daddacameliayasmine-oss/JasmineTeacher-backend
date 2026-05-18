@@ -7,12 +7,6 @@ CREATE DATABASE IF NOT EXISTS jasmine_teacher
 
 USE jasmine_teacher;
 
--- Table d'exemple utilisée par le module items.
-CREATE TABLE IF NOT EXISTS items (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  title VARCHAR(255) NOT NULL
-);
-
 -- Utilisateurs : visiteurs qui se transforment en élèves après inscription.
 -- Le rôle "admin" est réservé à Jasmine (à provisionner manuellement en BDD).
 CREATE TABLE IF NOT EXISTS users (

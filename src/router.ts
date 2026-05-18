@@ -3,7 +3,6 @@ import authRouter from "./modules/auth/authRoutes.js";
 import bookingsRouter from "./modules/bookings/bookingsRoutes.js";
 import contactRouter from "./modules/contact/contactRoutes.js";
 import coursesRouter from "./modules/courses/coursesRoutes.js";
-import itemsRouter from "./modules/items/itemsRoutes.js";
 import paymentsRouter from "./modules/payments/paymentsRoutes.js";
 import statsRouter from "./modules/stats/statsRoutes.js";
 import usersRouter from "./modules/users/usersRoutes.js";
@@ -25,8 +24,5 @@ router.use("/users", usersRouter);
 router.use("/payments", paymentsRouter);
 router.use("/contact", contactRouter);
 router.use("/stats", statsRouter);
-
-// Module d'exemple (à supprimer une fois les vrais modules en place).
-router.use("/items", itemsRouter);
 
 export default router;
