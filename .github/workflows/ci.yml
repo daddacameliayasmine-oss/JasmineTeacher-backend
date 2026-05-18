@@ -1,0 +1,32 @@
+# Pipeline CI : lance lint + build a chaque PR vers dev ou main.
+# Bloque les merges si l'une des deux etapes echoue (qualite avant tout).
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+jobs:
+  quality:
+    name: Lint + Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Installation des dependances
+        run: npm install
+
+      - name: Verification du lint (Biome)
+        run: npm run lint
+
+      - name: Compilation TypeScript
+        run: npm run build
