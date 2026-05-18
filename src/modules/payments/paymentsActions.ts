@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { getStripeClient } from "../../utils/stripe.js";
 import * as bookingsRepository from "../bookings/bookingsRepository.js";
 import * as coursesRepository from "../courses/coursesRepository.js";
 import * as paymentsRepository from "./paymentsRepository.js";
@@ -52,4 +53,60 @@ export const pay = async (req: Request, res: Response): Promise<void> => {
 export const browseAll = async (_req: Request, res: Response): Promise<void> => {
   const payments = await paymentsRepository.findAll();
   res.json(payments);
+};
+
+// POST /api/payments/checkout-session — cree une session Stripe Checkout (mode test).
+// Body : { bookingId: number }
+// Renvoie l'URL Stripe vers laquelle rediriger le navigateur de l'eleve.
+// Necessite STRIPE_SECRET_KEY ; sinon utiliser le flux mock POST /api/payments.
+export const createCheckoutSession = async (req: Request, res: Response): Promise<void> => {
+  const stripe = getStripeClient();
+  if (!stripe) {
+    res.status(503).json({ error: "Stripe non configure (utilisez le mode mock)" });
+    return;
+  }
+
+  const bookingId = Number((req.body as { bookingId?: unknown })?.bookingId);
+  if (!Number.isInteger(bookingId) || bookingId < 1) {
+    res.status(400).json({ error: "bookingId invalide" });
+    return;
+  }
+
+  const booking = await bookingsRepository.findById(bookingId);
+  if (!booking || booking.user_id !== req.auth!.userId) {
+    res.status(404).json({ error: "Reservation introuvable" });
+    return;
+  }
+  if (booking.status !== "pending") {
+    res.status(409).json({ error: "Cette reservation n'est plus en attente" });
+    return;
+  }
+
+  const course = await coursesRepository.findById(booking.course_id);
+  if (!course) {
+    res.status(404).json({ error: "Cours associe introuvable" });
+    return;
+  }
+
+  // Session Checkout one-shot. Le booking est confirme cote serveur quand
+  // le navigateur revient sur l'URL de succes (cf. POST /api/payments mock-finalize).
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    payment_method_types: ["card"],
+    line_items: [
+      {
+        price_data: {
+          currency: "eur",
+          unit_amount: Math.round(Number(course.price) * 100),
+          product_data: { name: course.title },
+        },
+        quantity: 1,
+      },
+    ],
+    success_url: process.env.STRIPE_SUCCESS_URL ?? "http://localhost:5173/mon-espace?paid=1",
+    cancel_url: process.env.STRIPE_CANCEL_URL ?? "http://localhost:5173/mon-espace?cancelled=1",
+    metadata: { bookingId: String(bookingId) },
+  });
+
+  res.status(201).json({ url: session.url });
 };
