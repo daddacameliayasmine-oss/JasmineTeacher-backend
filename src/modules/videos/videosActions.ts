@@ -32,7 +32,9 @@ export const add = async (req: Request, res: Response): Promise<void> => {
     url: body.url,
     is_public: body.is_public !== false,
   });
-  res.status(201).json({ id, title: body.title, url: body.url, is_public: body.is_public !== false });
+  res
+    .status(201)
+    .json({ id, title: body.title, url: body.url, is_public: body.is_public !== false });
 };
 
 // DELETE /api/videos/:id — suppression (admin uniquement).

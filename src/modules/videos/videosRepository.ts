@@ -29,10 +29,11 @@ export const findAll = async (): Promise<Video[]> => {
 };
 
 export const create = async (input: VideoInput): Promise<number> => {
-  const [result] = await pool.query(
-    "INSERT INTO videos (title, url, is_public) VALUES (?, ?, ?)",
-    [input.title, input.url, input.is_public],
-  );
+  const [result] = await pool.query("INSERT INTO videos (title, url, is_public) VALUES (?, ?, ?)", [
+    input.title,
+    input.url,
+    input.is_public,
+  ]);
   return (result as { insertId: number }).insertId;
 };
 

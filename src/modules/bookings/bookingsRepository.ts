@@ -82,10 +82,10 @@ export const findById = async (id: number): Promise<Booking | null> => {
 };
 
 export const create = async (userId: number, courseId: number): Promise<number> => {
-  const [result] = await pool.query(
-    "INSERT INTO bookings (user_id, course_id) VALUES (?, ?)",
-    [userId, courseId],
-  );
+  const [result] = await pool.query("INSERT INTO bookings (user_id, course_id) VALUES (?, ?)", [
+    userId,
+    courseId,
+  ]);
   return (result as { insertId: number }).insertId;
 };
 

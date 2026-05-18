@@ -7,10 +7,6 @@ export const isEmail = (value: unknown): value is string => {
 };
 
 // Verifie qu'une chaine respecte une longueur min/max.
-export const isStringOfLength = (
-  value: unknown,
-  min: number,
-  max: number,
-): value is string => {
+export const isStringOfLength = (value: unknown, min: number, max: number): value is string => {
   return typeof value === "string" && value.length >= min && value.length <= max;
 };
