@@ -4,12 +4,7 @@ import * as coursesRepository from "./coursesRepository.js";
 import type { CourseInput } from "./coursesRepository.js";
 
 // Types autorises pour un cours (correspond a l'ENUM SQL).
-const ALLOWED_TYPES = [
-  "collectif",
-  "individuel",
-  "enfant_collectif",
-  "enfant_individuel",
-] as const;
+const ALLOWED_TYPES = ["collectif", "individuel", "enfant_collectif", "enfant_individuel"] as const;
 
 // Parse et valide les donnees recues. Renvoie null si invalide.
 const parseCourseInput = (body: unknown): CourseInput | null => {

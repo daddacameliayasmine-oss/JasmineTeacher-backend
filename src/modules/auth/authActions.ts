@@ -31,7 +31,9 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   const userId = await authRepository.create({ lastname, firstname, email, passwordHash });
   const token = signToken({ userId, role: "student" });
 
-  res.status(201).json({ token, user: { id: userId, lastname, firstname, email, role: "student" } });
+  res
+    .status(201)
+    .json({ token, user: { id: userId, lastname, firstname, email, role: "student" } });
 };
 
 // POST /api/auth/login — connecte un utilisateur existant.
