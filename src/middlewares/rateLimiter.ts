@@ -17,6 +17,12 @@ type Options = {
 
 export const rateLimit = ({ windowMs = 60_000, max = 10 }: Options = {}) => {
   return (req: Request, res: Response, next: NextFunction): void => {
+    // Echappatoire pour les tests E2E : la variable d'env DISABLE_RATE_LIMIT
+    // permet de bypasser le rate limit (ne JAMAIS activer en production).
+    if (process.env.DISABLE_RATE_LIMIT === "true") {
+      next();
+      return;
+    }
     const ip = req.ip ?? "unknown";
     const now = Date.now();
     const bucket = buckets.get(ip);

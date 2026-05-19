@@ -9,10 +9,12 @@ npm run lint || {
 }
 
 # 2) Limite de 150 lignes modifiées (ajouts + suppressions),
-#    en excluant package-lock.json et les fichiers SVG.
+#    en excluant package-lock.json, les fichiers SVG et les fichiers Markdown
+#    (la doc cohérente d'un seul tenant ne doit pas être coupée artificiellement).
 CHANGED=$(git diff --cached --numstat \
   | grep -v "package-lock.json" \
   | grep -v "\.svg$" \
+  | grep -v "\.md$" \
   | awk '{ added += $1; removed += $2 } END { print added + removed }')
 
 if [ "${CHANGED:-0}" -gt 150 ]; then
