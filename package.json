@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
+    "seed": "tsx scripts/seed.ts",
     "build": "tsc",
     "start": "node dist/main.js",
     "lint": "biome check src",
