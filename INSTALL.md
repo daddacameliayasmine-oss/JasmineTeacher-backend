@@ -132,15 +132,15 @@ npm run dev
 
 ## 8. Comptes disponibles après seed
 
-Tous les comptes utilisent le **même mot de passe : `motdepasse123`**.
+| Email | Mot de passe | Rôle | État | User Stories testables |
+|---|---|---|---|---|
+| `jasmine@danse.com` | `motdepasse123` | admin | — | **US11–15** : créer cours, modif/suppr, liste élèves, paiements, ajouter vidéo |
+| `bob@example.com` | `motdepasse123` | student | 1 réservation **confirmed+payée** + 1 **pending** | **US5, US7, US8, US9, US10** : login, payer la pending, accéder visio, historique, annuler |
+| `charlie@example.com` | `motdepasse123` | student | 1 réservation **cancelled** | **US5, US9** : login, voir historique avec annulation |
+| `diana@example.com` | `motdepasse123` | student | Aucune réservation (vierge) | **US5, US6** : login + réserver un cours sans collision |
+| *(visiteur, pas connecté)* | — | — | — | **US1–4** : consulter cours, voir tarifs, créer un compte, regarder vidéos démo |
 
-| Email | Rôle | État | User Stories testables |
-|---|---|---|---|
-| `jasmine@danse.com` | admin | — | **US11–15** : créer cours, modif/suppr, liste élèves, paiements, ajouter vidéo |
-| `bob@example.com` | student | 1 réservation **confirmed+payée** + 1 **pending** | **US5, US7, US8, US9, US10** : login, payer la pending, accéder visio, historique, annuler |
-| `charlie@example.com` | student | 1 réservation **cancelled** | **US5, US9** : login, voir historique avec annulation |
-| `diana@example.com` | student | Aucune réservation (vierge) | **US5, US6** : login + réserver un cours sans collision |
-| *(visiteur, pas connecté)* | — | — | **US1–4** : consulter cours, voir tarifs, créer un compte, regarder vidéos démo |
+> 🔑 Tous les comptes du seed partagent le mot de passe **`motdepasse123`**. À ne JAMAIS reproduire en prod.
 
 ### Pour tester rapidement chaque user story
 
