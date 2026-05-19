@@ -96,7 +96,22 @@ npm install
 
 ---
 
-## 6. Lancer les serveurs (deux terminaux)
+## 6. Seeder la base de données
+
+Pour avoir un jeu de données prêt à tester les 15 user stories :
+
+```bash
+cd JasmineTeacher-backend
+npm run seed
+```
+
+Cette commande **truncate** toutes les tables puis insère un jeu complet (4 comptes, 5 cours, 3 vidéos, 3 bookings, 1 paiement, 1 message). À relancer dès que tu veux repartir d'un état propre.
+
+> ⚠️ **Ne JAMAIS lancer `npm run seed` en production** — la commande efface tout.
+
+---
+
+## 7. Lancer les serveurs (deux terminaux)
 
 ### Terminal 1 — Backend
 ```bash
@@ -115,12 +130,27 @@ npm run dev
 
 ---
 
-## 7. Créer un compte admin (Jasmine)
+## 8. Comptes disponibles après seed
 
-L'inscription publique crée toujours un `student`. Pour avoir un admin :
+Tous les comptes utilisent le **même mot de passe : `motdepasse123`**.
 
-1. S'inscrire normalement sur http://localhost:5173/inscription
-2. Promouvoir le compte en admin via MySQL :
+| Email | Rôle | État | User Stories testables |
+|---|---|---|---|
+| `jasmine@danse.com` | admin | — | **US11–15** : créer cours, modif/suppr, liste élèves, paiements, ajouter vidéo |
+| `bob@example.com` | student | 1 réservation **confirmed+payée** + 1 **pending** | **US5, US7, US8, US9, US10** : login, payer la pending, accéder visio, historique, annuler |
+| `charlie@example.com` | student | 1 réservation **cancelled** | **US5, US9** : login, voir historique avec annulation |
+| `diana@example.com` | student | Aucune réservation (vierge) | **US5, US6** : login + réserver un cours sans collision |
+| *(visiteur, pas connecté)* | — | — | **US1–4** : consulter cours, voir tarifs, créer un compte, regarder vidéos démo |
+
+### Pour tester rapidement chaque user story
+
+1. **Visiteur (US1–4)** : ouvrir http://localhost:5173 sans se connecter.
+2. **Élève (US5–10)** : se connecter avec `bob@example.com` / `motdepasse123` puis aller sur `/mon-espace` et `/cours`.
+3. **Admin (US11–15)** : se connecter avec `jasmine@danse.com` / `motdepasse123` puis aller sur `/admin`.
+
+### Promouvoir un autre compte en admin (optionnel)
+
+Si tu crées un compte via le formulaire et veux qu'il devienne admin :
 
 ```bash
 mysql -u root -p -D jasmine_teacher -e \
@@ -131,7 +161,7 @@ mysql -u root -p -D jasmine_teacher -e \
 
 ---
 
-## 8. Stripe (optionnel)
+## 9. Stripe (optionnel)
 
 Pour activer le vrai paiement Checkout (mode test) :
 
@@ -144,12 +174,13 @@ Sans clé : le bouton "Payer" utilise un **flux mock** (le booking passe directe
 
 ---
 
-## 9. Commandes utiles
+## 10. Commandes utiles
 
 ### Backend
 | Commande | Effet |
 |---|---|
 | `npm run dev` | Serveur en watch mode (rechargement à chaud) |
+| `npm run seed` | Reset + réinsère le jeu de démo (4 users, 5 cours, etc.) |
 | `npm run build` | Compile TypeScript dans `dist/` |
 | `npm start` | Lance la version compilée |
 | `npm run lint` | Vérifie le code avec Biome |
@@ -163,11 +194,26 @@ Sans clé : le bouton "Payer" utilise un **flux mock** (le booking passe directe
 | `npm run preview` | Preview du build |
 | `npm run lint` | Vérifie le code avec Biome |
 | `npm test` | Lance les 16 tests unitaires Vitest |
-| `npm run test:e2e` | Lance les 8 tests Playwright |
+| `npm run test:e2e` | Lance les 23 tests Playwright (8 smoke + 15 US) |
+
+### Lancer la suite E2E des 15 user stories
+
+```bash
+# Terminal 1 — backend avec rate limit désactivé (10/min sinon bloquant)
+cd JasmineTeacher-backend
+npm run seed
+DISABLE_RATE_LIMIT=true npm run dev
+
+# Terminal 2 — Playwright en mode séquentiel
+cd JasmineTeacher-frontend
+npx playwright test --workers=1
+```
+
+→ 23/23 tests verts en ~9 secondes.
 
 ---
 
-## 10. Dépannage
+## 11. Dépannage
 
 | Symptôme | Cause probable | Solution |
 |---|---|---|
@@ -175,11 +221,13 @@ Sans clé : le bouton "Payer" utilise un **flux mock** (le booking passe directe
 | `Access denied for user 'root'` | Mauvais mot de passe | Vérifier `DB_PASSWORD` dans `.env` |
 | Frontend ne voit pas l'API | Backend pas démarré ou mauvais port | Vérifier `http://localhost:3310/api/health` |
 | Erreur 401 sur `/api/*` | Token absent ou expiré | Se reconnecter |
+| `Trop de requetes` (429) sur login | Rate limit atteint (10/min) | Attendre 1 min OU `DISABLE_RATE_LIMIT=true` au démarrage |
+| Tests E2E échouent en série | Rate limit ou rate limiter | `DISABLE_RATE_LIMIT=true npm run dev` + `npm run seed` |
 | Workflow CI échoue | Lint ou test cassé | `npm run lint:fix && npm test` localement |
 
 ---
 
-## 11. Workflow Git
+## 12. Workflow Git
 
 Tout passe par des **Pull Requests** vers `dev` (jamais de push direct).
 

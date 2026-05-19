@@ -453,6 +453,21 @@ UPDATE users SET role='admin' WHERE email='jasmine@example.com';
 
 C'est volontaire : seule Jasmine doit être admin, et c'est le développeur qui la promeut au déploiement.
 
+### Seed reproductible
+
+`npm run seed` (script `scripts/seed.ts`) truncate toutes les tables et insère un jeu de données démo complet. À utiliser en dev pour repartir d'un état propre, **jamais en prod**.
+
+**Comptes créés** (mot de passe commun : `motdepasse123`) :
+
+| Email | Rôle | État | À utiliser pour |
+|---|---|---|---|
+| `jasmine@danse.com` | admin | — | Tester les US admin (11–15) |
+| `bob@example.com` | student | 1 confirmed+payée + 1 pending | Tester US payer, accéder visio, historique, annuler |
+| `charlie@example.com` | student | 1 cancelled | Tester historique avec annulation |
+| `diana@example.com` | student | vierge | Tester US réserver sans collision |
+
+Le seed crée aussi 5 cours (différents types et dates pour tester la règle J-7), 3 vidéos (2 publiques + 1 privée), 3 bookings, 1 paiement, 1 message de contact.
+
 ---
 
 ## 7. Le flow utilisateur complet (storyboard)
