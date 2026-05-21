@@ -55,6 +55,28 @@ export const browseAll = async (_req: Request, res: Response): Promise<void> => 
   res.json(payments);
 };
 
+// PUT /api/payments/:id — rembourse un paiement (admin uniquement).
+// Le booking associe repasse en "cancelled" pour reflecter la situation.
+export const refund = async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: "Identifiant invalide" });
+    return;
+  }
+  const payment = await paymentsRepository.findById(id);
+  if (!payment) {
+    res.status(404).json({ error: "Paiement introuvable" });
+    return;
+  }
+  const affected = await paymentsRepository.refund(id);
+  if (affected === 0) {
+    res.status(409).json({ error: "Paiement deja rembourse ou non paye" });
+    return;
+  }
+  await bookingsRepository.updateStatus(payment.booking_id, "cancelled");
+  res.json({ id, status: "refunded", booking_id: payment.booking_id });
+};
+
 // POST /api/payments/checkout-session — cree une session Stripe Checkout (mode test).
 // Body : { bookingId: number }
 // Renvoie l'URL Stripe vers laquelle rediriger le navigateur de l'eleve.

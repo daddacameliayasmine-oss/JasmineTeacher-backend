@@ -12,6 +12,7 @@ videosRouter.get("/all", requireAuth, videosActions.browseAll);
 
 // Gestion admin.
 videosRouter.post("/", requireAuth, requireAdmin, videosActions.add);
+videosRouter.put("/:id", requireAuth, requireAdmin, videosActions.edit);
 videosRouter.delete("/:id", requireAuth, requireAdmin, videosActions.destroy);
 
 export default videosRouter;

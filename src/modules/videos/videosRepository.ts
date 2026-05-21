@@ -37,6 +37,14 @@ export const create = async (input: VideoInput): Promise<number> => {
   return (result as { insertId: number }).insertId;
 };
 
+export const update = async (id: number, input: VideoInput): Promise<number> => {
+  const [result] = await pool.query(
+    "UPDATE videos SET title = ?, url = ?, is_public = ? WHERE id = ?",
+    [input.title, input.url, input.is_public, id],
+  );
+  return (result as { affectedRows: number }).affectedRows;
+};
+
 export const remove = async (id: number): Promise<number> => {
   const [result] = await pool.query("DELETE FROM videos WHERE id = ?", [id]);
   return (result as { affectedRows: number }).affectedRows;
