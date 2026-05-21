@@ -66,6 +66,39 @@ describe("CRUD endpoints — cablage routes", () => {
         .send({ role: "student" });
       expect(res.status).toBe(403);
     });
+
+    it("avec admin + body vide → 400", async () => {
+      const res = await request(app)
+        .put("/api/users/2")
+        .set("Authorization", `Bearer ${adminToken()}`)
+        .send({});
+      expect(res.status).toBe(400);
+    });
+
+    it("avec admin + firstname seul (sans lastname) → 400", async () => {
+      const res = await request(app)
+        .put("/api/users/2")
+        .set("Authorization", `Bearer ${adminToken()}`)
+        .send({ firstname: "Bob" });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("PUT /api/users/me", () => {
+    it("sans token → 401", async () => {
+      const res = await request(app)
+        .put("/api/users/me")
+        .send({ firstname: "Bob", lastname: "Martin" });
+      expect(res.status).toBe(401);
+    });
+
+    it("avec token mais payload invalide → 400", async () => {
+      const res = await request(app)
+        .put("/api/users/me")
+        .set("Authorization", `Bearer ${studentToken()}`)
+        .send({ firstname: "" });
+      expect(res.status).toBe(400);
+    });
   });
 
   describe("DELETE /api/users/:id", () => {

@@ -21,6 +21,33 @@ export const findAll = async (): Promise<PublicUser[]> => {
   return rows as PublicUser[];
 };
 
+// Retourne un user (sans password_hash) par id, ou null.
+// Utilise apres un update pour renvoyer l'etat a jour au client.
+export const findPublicById = async (id: number): Promise<PublicUser | null> => {
+  const [rows] = await pool.query(
+    `SELECT id, lastname, firstname, email, role, created_at
+     FROM users WHERE id = ?`,
+    [id],
+  );
+  return (rows as PublicUser[])[0] ?? null;
+};
+
+// Met a jour le prenom et le nom d'un user (self ou admin).
+// L'email et le role restent intouchables ici : email = identifiant unique,
+// role = privilege admin uniquement (cf. updateRole).
+export const updateProfile = async (
+  id: number,
+  firstname: string,
+  lastname: string,
+): Promise<number> => {
+  const [result] = await pool.query("UPDATE users SET firstname = ?, lastname = ? WHERE id = ?", [
+    firstname,
+    lastname,
+    id,
+  ]);
+  return (result as { affectedRows: number }).affectedRows;
+};
+
 // Met a jour le role d'un user (admin uniquement) — promouvoir / retrograder.
 export const updateRole = async (id: number, role: "student" | "admin"): Promise<number> => {
   const [result] = await pool.query("UPDATE users SET role = ? WHERE id = ?", [role, id]);
