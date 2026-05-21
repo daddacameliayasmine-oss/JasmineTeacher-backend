@@ -14,4 +14,7 @@ contactRouter.post("/", contactLimiter, contactActions.add);
 // Listing reserve a l'admin.
 contactRouter.get("/", requireAuth, requireAdmin, contactActions.browse);
 
+// Suppression d'un message traite (admin uniquement).
+contactRouter.delete("/:id", requireAuth, requireAdmin, contactActions.destroy);
+
 export default contactRouter;

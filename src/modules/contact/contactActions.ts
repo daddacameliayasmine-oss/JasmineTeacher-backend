@@ -24,3 +24,18 @@ export const browse = async (_req: Request, res: Response): Promise<void> => {
   const messages = await contactRepository.findAll();
   res.json(messages);
 };
+
+// DELETE /api/contact/:id — purge un message traite (admin uniquement).
+export const destroy = async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: "Identifiant invalide" });
+    return;
+  }
+  const affected = await contactRepository.remove(id);
+  if (affected === 0) {
+    res.status(404).json({ error: "Message introuvable" });
+    return;
+  }
+  res.status(204).send();
+};
