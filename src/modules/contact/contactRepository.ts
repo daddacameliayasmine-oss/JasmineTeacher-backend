@@ -21,3 +21,9 @@ export const findAll = async (): Promise<ContactMessage[]> => {
   const [rows] = await pool.query("SELECT * FROM contact_messages ORDER BY created_at DESC");
   return rows as ContactMessage[];
 };
+
+// Supprime un message traite (admin uniquement) — purge.
+export const remove = async (id: number): Promise<number> => {
+  const [result] = await pool.query("DELETE FROM contact_messages WHERE id = ?", [id]);
+  return (result as { affectedRows: number }).affectedRows;
+};

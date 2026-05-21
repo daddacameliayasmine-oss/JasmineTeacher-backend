@@ -14,4 +14,7 @@ paymentsRouter.post("/checkout-session", requireAuth, paymentsActions.createChec
 // Listing global pour l'admin (suivi des revenus).
 paymentsRouter.get("/", requireAuth, requireAdmin, paymentsActions.browseAll);
 
+// Remboursement d'un paiement (admin uniquement) — annule la booking associee.
+paymentsRouter.put("/:id/refund", requireAuth, requireAdmin, paymentsActions.refund);
+
 export default paymentsRouter;
