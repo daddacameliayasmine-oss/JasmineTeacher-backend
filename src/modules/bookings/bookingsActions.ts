@@ -59,6 +59,28 @@ export const add = async (req: Request, res: Response): Promise<void> => {
   res.status(201).json({ id, user_id: req.auth!.userId, course_id: courseId, status: "pending" });
 };
 
+// PUT /api/bookings/:id — modifie le status d'une reservation (admin uniquement).
+// Utile pour corriger manuellement (rebasculer en confirmed apres un paiement
+// effectue hors ligne, ou remettre en pending pour relancer le paiement).
+export const editStatus = async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  const status = (req.body as { status?: unknown })?.status;
+  if (
+    !Number.isInteger(id) ||
+    id < 1 ||
+    (status !== "pending" && status !== "confirmed" && status !== "cancelled")
+  ) {
+    res.status(400).json({ error: "id ou status invalide" });
+    return;
+  }
+  const affected = await bookingsRepository.updateStatus(id, status);
+  if (affected === 0) {
+    res.status(404).json({ error: "Reservation introuvable" });
+    return;
+  }
+  res.json({ id, status });
+};
+
 // DELETE /api/bookings/:id — annule la reservation (status = cancelled).
 // L'eleve ne peut annuler QUE ses propres reservations. L'admin peut tout annuler.
 export const cancel = async (req: Request, res: Response): Promise<void> => {

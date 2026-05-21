@@ -20,3 +20,15 @@ export const findAll = async (): Promise<PublicUser[]> => {
   );
   return rows as PublicUser[];
 };
+
+// Met a jour le role d'un user (admin uniquement) — promouvoir / retrograder.
+export const updateRole = async (id: number, role: "student" | "admin"): Promise<number> => {
+  const [result] = await pool.query("UPDATE users SET role = ? WHERE id = ?", [role, id]);
+  return (result as { affectedRows: number }).affectedRows;
+};
+
+// Supprime un user (admin uniquement). CASCADE supprime bookings/courses associes.
+export const remove = async (id: number): Promise<number> => {
+  const [result] = await pool.query("DELETE FROM users WHERE id = ?", [id]);
+  return (result as { affectedRows: number }).affectedRows;
+};

@@ -37,6 +37,31 @@ export const add = async (req: Request, res: Response): Promise<void> => {
     .json({ id, title: body.title, url: body.url, is_public: body.is_public !== false });
 };
 
+// PUT /api/videos/:id — modification (admin uniquement).
+// Permet de corriger un titre ou une URL, ou de basculer entre public/privé.
+export const edit = async (req: Request, res: Response): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) {
+    res.status(400).json({ error: "Identifiant invalide" });
+    return;
+  }
+  const body = req.body as { title?: unknown; url?: unknown; is_public?: unknown };
+  if (!isStringOfLength(body.title, 1, 200) || !isHttpUrl(body.url)) {
+    res.status(400).json({ error: "Titre et URL http(s) requis" });
+    return;
+  }
+  const affected = await videosRepository.update(id, {
+    title: body.title,
+    url: body.url,
+    is_public: body.is_public !== false,
+  });
+  if (affected === 0) {
+    res.status(404).json({ error: "Video introuvable" });
+    return;
+  }
+  res.json({ id, title: body.title, url: body.url, is_public: body.is_public !== false });
+};
+
 // DELETE /api/videos/:id — suppression (admin uniquement).
 export const destroy = async (req: Request, res: Response): Promise<void> => {
   const id = Number(req.params.id);
