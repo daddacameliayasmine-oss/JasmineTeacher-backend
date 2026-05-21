@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
-import { getStripeClient } from "../../utils/stripe.js";
+import type Stripe from "stripe";
+import { getStripeClient, verifyWebhookEvent } from "../../utils/stripe.js";
 import * as bookingsRepository from "../bookings/bookingsRepository.js";
 import * as coursesRepository from "../courses/coursesRepository.js";
 import * as paymentsRepository from "./paymentsRepository.js";
@@ -110,25 +111,78 @@ export const createCheckoutSession = async (req: Request, res: Response): Promis
     return;
   }
 
-  // Session Checkout one-shot. Le booking est confirme cote serveur quand
-  // le navigateur revient sur l'URL de succes (cf. POST /api/payments mock-finalize).
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    payment_method_types: ["card"],
-    line_items: [
-      {
-        price_data: {
-          currency: "eur",
-          unit_amount: Math.round(Number(course.price) * 100),
-          product_data: { name: course.title },
+  // Session Checkout. Le booking sera confirme cote serveur via le webhook
+  // 'checkout.session.completed' (signature verifiee) — pas via le success_url
+  // (jamais fiable car l'eleve peut ne pas revenir).
+  // Idempotency key : evite les sessions en double si l'eleve double-clique.
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: "payment",
+      line_items: [
+        {
+          price_data: {
+            currency: "eur",
+            unit_amount: Math.round(Number(course.price) * 100),
+            product_data: { name: course.title },
+          },
+          quantity: 1,
         },
-        quantity: 1,
-      },
-    ],
-    success_url: process.env.STRIPE_SUCCESS_URL ?? "http://localhost:5173/mon-espace?paid=1",
-    cancel_url: process.env.STRIPE_CANCEL_URL ?? "http://localhost:5173/mon-espace?cancelled=1",
-    metadata: { bookingId: String(bookingId) },
-  });
+      ],
+      success_url: process.env.STRIPE_SUCCESS_URL ?? "http://localhost:5173/mon-espace?paid=1",
+      cancel_url: process.env.STRIPE_CANCEL_URL ?? "http://localhost:5173/mon-espace?cancelled=1",
+      // Metadata indispensables : on les retrouve dans le webhook pour
+      // identifier la booking sans faire confiance au client.
+      metadata: { bookingId: String(bookingId), userId: String(req.auth!.userId) },
+    },
+    { idempotencyKey: `checkout-booking-${bookingId}` },
+  );
 
   res.status(201).json({ url: session.url });
+};
+
+// POST /api/payments/webhook — receveur des events Stripe.
+// IMPORTANT : route configuree avec express.raw() pour preserver le body
+// exact recu de Stripe (sinon la verification de signature echoue).
+// Documentation officielle : https://docs.stripe.com/webhooks/signatures
+export const webhook = async (req: Request, res: Response): Promise<void> => {
+  const signature = req.headers["stripe-signature"];
+  if (typeof signature !== "string") {
+    res.status(400).json({ error: "Signature Stripe manquante" });
+    return;
+  }
+
+  let event: Stripe.Event;
+  try {
+    // req.body est un Buffer ici grace au middleware express.raw sur la route.
+    event = verifyWebhookEvent(req.body as Buffer, signature);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Signature invalide";
+    res.status(400).json({ error: `Webhook: ${message}` });
+    return;
+  }
+
+  // On ne traite que les events pertinents pour notre flow de paiement.
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const bookingId = Number(session.metadata?.bookingId);
+    if (!Number.isInteger(bookingId) || bookingId < 1) {
+      res.status(400).json({ error: "Metadata bookingId manquant ou invalide" });
+      return;
+    }
+    const booking = await bookingsRepository.findById(bookingId);
+    if (!booking) {
+      // Booking introuvable : on renvoie 200 pour eviter que Stripe retry indefiniment.
+      res.json({ received: true, ignored: "booking introuvable" });
+      return;
+    }
+    // Idempotent : si deja confirme, on ne refait pas le travail.
+    if (booking.status !== "confirmed") {
+      const amount = (session.amount_total ?? 0) / 100;
+      await paymentsRepository.createPaid(bookingId, amount);
+      await bookingsRepository.updateStatus(bookingId, "confirmed");
+    }
+  }
+
+  // Toujours repondre 200 sinon Stripe va re-essayer pendant 3 jours.
+  res.json({ received: true });
 };
