@@ -230,7 +230,9 @@ BOOKINGS
 PAYMENTS
   POST   /api/payments                  Paiement mock (instantané)
   POST   /api/payments/checkout-session [auth] Crée une session Stripe Checkout
+  POST   /api/payments/webhook          [public, signature Stripe] Confirme le paiement réel (cf. §9)
   GET    /api/payments                  [admin] Liste tous les paiements
+  PUT    /api/payments/:id/refund       [admin] Rembourse un paiement
 
 VIDEOS
   GET    /api/videos                    Vidéos publiques (visiteur)
@@ -411,11 +413,12 @@ L'ambiance voulue : **sombre, mystique, oriental, luxueux**. Inspiration arches 
                         ├─────────────┤         │   videos    │
                         │ id          │         ├─────────────┤
                         │ booking_id  │         │ id          │
-                        │ amount (CHK)│         │ title       │
-                        │ status      │         │ url         │
-                        │ paid_at     │         │ is_public   │
-                        └─────────────┘         │ created_at  │
-                                                └─────────────┘
+                        │  (NULLABLE, │         │ title       │
+                        │  SET NULL)  │         │ url         │
+                        │ amount (CHK)│         │ is_public   │
+                        │ status      │         │ created_at  │
+                        │ paid_at     │         └─────────────┘
+                        └─────────────┘
                         ┌─────────────────┐
                         │contact_messages │
                         ├─────────────────┤
@@ -445,11 +448,12 @@ const [rows] = await pool.query(
 
 ### Contraintes importantes
 
-> 📌 Section corrigée le 2026-11-05 — deux erreurs trouvées dans ce fichier lui-même en comparant avec `database.sql` réel. Détail complet dans `MERISE.md` §7.
+> 📌 Section corrigée le 2026-11-06 (plusieurs passes) — plusieurs erreurs trouvées dans ce fichier lui-même en comparant avec `database.sql` réel. Détail complet dans `MERISE.md` §7. Pour le MCD en notation Merise classique, le dictionnaire de données complet et le MLD, voir `MERISE.md` §1 et §2 (avec images dans `docs/schemas/`).
 
 - **UNIQUE(user_id, active_course_id)** sur `bookings` (et non `UNIQUE(user_id, course_id)` comme l'ancienne version de ce fichier l'affirmait à tort) : un élève ne peut pas avoir 2 réservations **actives** (`pending`/`confirmed`) sur le même cours, mais **peut** se réinscrire après avoir annulé — `active_course_id` est une colonne générée qui vaut `NULL` quand `status='cancelled'`, et MySQL autorise plusieurs `NULL` dans un index `UNIQUE`.
-- **ON DELETE CASCADE** sur `bookings.user_id`, `bookings.course_id` et `payments.booking_id` : si on supprime un user ou un cours, ses bookings (et les paiements liés) disparaissent aussi (ça simplifie, on n'a pas à gérer les références orphelines).
-- **ON DELETE RESTRICT** sur `courses.created_by` (et non `CASCADE` comme l'ancienne version de ce fichier l'affirmait à tort) : on ne peut **pas** supprimer un `user` tant qu'il reste des `courses` dont il est le créateur — sinon ça supprimerait en cascade tous ses cours, puis toutes les bookings et paiements liés de tous les élèves, ce qui détruirait un historique financier à cause de la suppression d'un seul compte admin. Il faut explicitement réassigner ou supprimer ces cours d'abord.
+- **ON DELETE CASCADE** sur `bookings.user_id` et `bookings.course_id` (volontaire) : si on supprime un user ou un cours, ses bookings disparaissent aussi (comme annuler un abonnement quand le compte/produit disparaît), pas de référence orpheline à gérer.
+- **ON DELETE SET NULL** sur `payments.booking_id` *(corrigé le 2026-11-06, ce fichier affirmait encore `CASCADE` à tort)* : **ce n'est plus `CASCADE`**. Un paiement est une trace financière qui ne doit jamais disparaître comme simple effet de bord de la suppression d'un cours ou d'un compte élève. Quand la booking liée disparaît (cascade ci-dessus), la ligne `payments` **est conservée** avec `booking_id = NULL` (montant, statut, date intacts) au lieu d'être supprimée. `booking_id` est donc **nullable** (et c'est la seule FK nullable du schéma).
+- **ON DELETE RESTRICT** sur `courses.created_by` (et non `CASCADE` comme l'ancienne version de ce fichier l'affirmait à tort) : on ne peut **pas** supprimer un `user` tant qu'il reste des `courses` dont il est le créateur — sinon ça supprimerait en cascade tous ses cours, puis toutes les bookings de tous les élèves. Il faut explicitement réassigner ou supprimer ces cours d'abord.
 - **Pas de UNIQUE(booking_id)** sur `payments` : une réservation peut avoir plusieurs paiements au fil du temps (paiement → remboursement → nouveau paiement), c'est volontaire.
 
 ### Le rôle admin
@@ -596,9 +600,17 @@ C'est utile pour le dev sans configuration et pour les tests automatisés (CI).
 - Renvoie `{ url: "https://checkout.stripe.com/c/pay/..." }`.
 - Le front fait `window.location.assign(url)` → redirection vers la page Stripe.
 - Stripe gère la carte, le 3DS, etc.
-- Après paiement, Stripe redirige vers `STRIPE_SUCCESS_URL` (configurable).
+- Après paiement, Stripe redirige vers `STRIPE_SUCCESS_URL` (configurable) — mais ce n'est **qu'un confort d'affichage**, pas le mécanisme de confirmation (voir ci-dessous).
 
-**Limitation actuelle** : on n'a pas encore implémenté le **webhook Stripe** qui confirmerait le booking côté serveur après paiement. Pour l'instant on se repose sur l'URL de succès. À ajouter pour un vrai usage prod : `POST /api/payments/webhook` avec vérification de signature.
+> 📌 *(corrigé le 2026-11-06, ce fichier affirmait à tort que le webhook n'était pas implémenté)* **Le webhook Stripe est pleinement implémenté**, c'est lui — pas la redirection du navigateur — qui confirme réellement le paiement côté serveur :
+>
+> - Route : `POST /api/payments/webhook` (`paymentsActions.webhook`), montée avec `express.raw()` pour préserver le body exact (nécessaire à la vérification de signature).
+> - **Signature Stripe vérifiée** (`verifyWebhookEvent` via `STRIPE_WEBHOOK_SECRET`) avant tout traitement — impossible de forger une confirmation de paiement en appelant l'endpoint directement.
+> - **Idempotent** : si `booking.status` est déjà `'confirmed'`, l'event `checkout.session.completed` est ignoré sans ré-insérer de paiement (Stripe peut renvoyer le même event plusieurs fois).
+> - Le `bookingId` est lu depuis `session.metadata.bookingId` (posé côté serveur à la création de la session), jamais depuis une donnée envoyée par le navigateur.
+> - Répond toujours `200` une fois l'event compris (même ignoré), sinon Stripe retente pendant 3 jours.
+>
+> Pourquoi la redirection `STRIPE_SUCCESS_URL` ne suffit pas : l'élève peut fermer l'onglet avant d'y revenir, ou la requête réseau peut échouer — le webhook est la seule source de vérité fiable. Diagramme de séquence complet : `SCHEMAS.md` §5.1.
 
 ### Comment le front choisit
 
@@ -907,7 +919,7 @@ if (course.start_at < minBookingDate) ...
 
 ### Backend
 - **Pas de tests d'intégration**. Les actions ne sont pas testées avec un pool MySQL mocké ou un container MySQL en CI. Étape suivante : ajouter `supertest` + un MySQL de test.
-- **Pas de webhook Stripe**. Le booking est confirmé via `success_url` côté front, donc un utilisateur malin pourrait recharger l'URL de succès sans payer. Pour la prod : implémenter `POST /api/payments/webhook` avec vérification de signature.
+- ~~Pas de webhook Stripe~~ *(corrigé le 2026-11-06 : ce point était faux, le webhook `POST /api/payments/webhook` est pleinement implémenté — signature vérifiée, idempotent, voir §9)*. Point de vigilance réel à la place : `DELETE /bookings/:id` sur une booking `confirmed` ne déclenche **aucun remboursement automatique** dans `payments` — l'admin doit explicitement appeler `PUT /api/payments/:id/refund`, sinon les deux tables restent temporairement incohérentes (voir `SCHEMAS.md` §10).
 - **Rate limiter en mémoire**. Sur plusieurs instances ou après un restart, le compteur est réinitialisé. Pour la prod : passer à Redis.
 - **`JWT_SECRET=change_me_in_production`** dans `.env`. À régénérer avec `openssl rand -hex 32` au déploiement.
 - **Migration de schéma** : on a juste `database.sql`. Pas d'outil de migration (Flyway, Liquibase). À ajouter quand le schéma évoluera en prod.
