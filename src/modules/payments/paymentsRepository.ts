@@ -4,7 +4,9 @@ export type PaymentStatus = "pending" | "paid" | "refunded";
 
 export type Payment = {
   id: number;
-  booking_id: number;
+  // null quand la booking d'origine a été supprimée (cascade cours/user) :
+  // le paiement reste en base comme trace financière, voir database.sql.
+  booking_id: number | null;
   amount: number;
   status: PaymentStatus;
   paid_at: Date | null;
