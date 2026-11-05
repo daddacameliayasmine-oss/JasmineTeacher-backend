@@ -395,20 +395,23 @@ L'ambiance voulue : **sombre, mystique, oriental, luxueux**. Inspiration arches 
 │ lastname    │         │ user_id (FK)│         │ title       │
 │ firstname   │         │ course_id   │         │ description │
 │ email       │         │ status      │         │ type        │
-│ password_   │         │ created_at  │         │ price       │
-│   hash      │         │             │         │ capacity    │
-│ role        │         │ UNIQUE(user,│         │ start_at    │
-│ created_at  │         │   course)   │         │ duration_   │
-└─────────────┘         └─────┬───────┘         │   minutes   │
-                              │ 1               │ visio_url   │
-                              │                 │ created_by  │
+│ password_   │         │ created_at  │         │ price (CHK) │
+│   hash      │         │ active_     │         │ capacity    │
+│ role        │         │  course_id  │         │  (CHK >= 1) │
+│ created_at  │         │  (virtuelle)│         │ start_at    │
+└─────────────┘         │ UNIQUE(user,│         │ duration_   │
+                        │  active_    │         │  minutes    │
+                        │  course_id) │         │  (CHK >= 15)│
+                        └─────┬───────┘         │ visio_url   │
+                              │ 1               │ created_by  │
+                              │                 │ (RESTRICT)  │
                               ▼ N               └─────────────┘
                         ┌─────────────┐
                         │  payments   │         ┌─────────────┐
                         ├─────────────┤         │   videos    │
                         │ id          │         ├─────────────┤
                         │ booking_id  │         │ id          │
-                        │ amount      │         │ title       │
+                        │ amount (CHK)│         │ title       │
                         │ status      │         │ url         │
                         │ paid_at     │         │ is_public   │
                         └─────────────┘         │ created_at  │
@@ -422,6 +425,8 @@ L'ambiance voulue : **sombre, mystique, oriental, luxueux**. Inspiration arches 
                         │ created_at      │
                         └─────────────────┘
 ```
+
+**Lecture du schéma** : `users 1--N bookings` veut dire qu'un `user` peut avoir 0 à N `bookings`, et qu'un `booking` a toujours exactement 1 `user` (cardinalité portée par la FK `user_id NOT NULL`). Même lecture pour `courses 1--N bookings` et `bookings 1--N payments` (ce dernier **peut** avoir 0 paiement — cf. "Contraintes importantes" ci-dessous). Pour l'explication complète et détaillée de chaque cardinalité (pourquoi `1` d'un côté et `N` de l'autre, et ce que ça implique en SQL), voir `MERISE.md` §1 et `SCHEMAS.md` §1.1-§1.2 — ce schéma ASCII n'est qu'un résumé visuel rapide.
 
 ### Pourquoi pas d'ORM ?
 
@@ -440,8 +445,12 @@ const [rows] = await pool.query(
 
 ### Contraintes importantes
 
-- **UNIQUE(user_id, course_id)** sur `bookings` : un élève ne peut pas réserver 2 fois le même cours.
-- **ON DELETE CASCADE** sur toutes les FK : si on supprime un user, ses bookings, paiements et cours créés sont aussi supprimés (ça simplifie, on n'a pas à gérer les références orphelines).
+> 📌 Section corrigée le 2026-11-05 — deux erreurs trouvées dans ce fichier lui-même en comparant avec `database.sql` réel. Détail complet dans `MERISE.md` §7.
+
+- **UNIQUE(user_id, active_course_id)** sur `bookings` (et non `UNIQUE(user_id, course_id)` comme l'ancienne version de ce fichier l'affirmait à tort) : un élève ne peut pas avoir 2 réservations **actives** (`pending`/`confirmed`) sur le même cours, mais **peut** se réinscrire après avoir annulé — `active_course_id` est une colonne générée qui vaut `NULL` quand `status='cancelled'`, et MySQL autorise plusieurs `NULL` dans un index `UNIQUE`.
+- **ON DELETE CASCADE** sur `bookings.user_id`, `bookings.course_id` et `payments.booking_id` : si on supprime un user ou un cours, ses bookings (et les paiements liés) disparaissent aussi (ça simplifie, on n'a pas à gérer les références orphelines).
+- **ON DELETE RESTRICT** sur `courses.created_by` (et non `CASCADE` comme l'ancienne version de ce fichier l'affirmait à tort) : on ne peut **pas** supprimer un `user` tant qu'il reste des `courses` dont il est le créateur — sinon ça supprimerait en cascade tous ses cours, puis toutes les bookings et paiements liés de tous les élèves, ce qui détruirait un historique financier à cause de la suppression d'un seul compte admin. Il faut explicitement réassigner ou supprimer ces cours d'abord.
+- **Pas de UNIQUE(booking_id)** sur `payments` : une réservation peut avoir plusieurs paiements au fil du temps (paiement → remboursement → nouveau paiement), c'est volontaire.
 
 ### Le rôle admin
 
@@ -492,7 +501,7 @@ Le seed crée aussi 5 cours (différents types et dates pour tester la règle J-
    - `requireAuth` vérifie le JWT → OK, `req.auth = { userId: 5, role: "student" }`.
    - Action vérifie : `start_at` est-il à au moins **J+7** ? Oui (J+15). OK.
    - Action vérifie : la capacité n'est-elle pas pleine ? OK.
-   - Action vérifie : Eve n'a-t-elle pas déjà réservé ce cours ? Non (contrainte UNIQUE).
+   - Action vérifie via un `SELECT` explicite : Eve n'a-t-elle pas déjà une réservation active sur ce cours ? Non (la contrainte `UNIQUE(user_id, active_course_id)` en base n'est qu'un filet de sécurité derrière ce contrôle applicatif, cf. §6 "Contraintes importantes").
    - Repository insère la booking avec `status='pending'`.
    - Renvoie `201`.
 10. **Eve va sur** `/mon-espace` → voit sa réservation "En attente de paiement", boutons "Payer 20€" et "Annuler".
