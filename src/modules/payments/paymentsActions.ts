@@ -74,7 +74,11 @@ export const refund = async (req: Request, res: Response): Promise<void> => {
     res.status(409).json({ error: "Paiement deja rembourse ou non paye" });
     return;
   }
-  await bookingsRepository.updateStatus(payment.booking_id, "cancelled");
+  // La booking d'origine peut avoir ete supprimee (cours/compte retire depuis) :
+  // booking_id est alors null, le paiement reste la trace financiere a lui seul.
+  if (payment.booking_id !== null) {
+    await bookingsRepository.updateStatus(payment.booking_id, "cancelled");
+  }
   res.json({ id, status: "refunded", booking_id: payment.booking_id });
 };
 
