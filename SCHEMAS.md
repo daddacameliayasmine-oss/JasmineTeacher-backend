@@ -248,21 +248,24 @@ sequenceDiagram
     alt start_at < now + 7 jours
         B-->>F: 400 "Reservation a minimum 7 jours d'avance"
         F-->>E: Message d'erreur lisible
+    else déjà une réservation active sur ce cours
+        B->>DB: SELECT * FROM bookings<br/>WHERE user_id=? AND course_id=? AND status!='cancelled'
+        DB-->>B: une ligne trouvée
+        B-->>F: 409 "Vous avez deja une reservation pour ce cours"
     else capacité pleine
         B->>DB: SELECT COUNT(*) FROM bookings<br/>WHERE course_id=? AND status!='cancelled'
         DB-->>B: count >= capacity
-        B-->>F: 409 "Capacite pleine"
-    else doublon (UNIQUE)
+        B-->>F: 409 "Cours complet"
+    else OK (y compris réinscription après annulation)
         B->>DB: INSERT INTO bookings<br/>(user_id, course_id, 'pending')
-        DB-->>B: ER_DUP_ENTRY
-        B-->>F: 409 "Deja reserve"
-    else OK
-        B->>DB: INSERT INTO bookings<br/>(user_id, course_id, 'pending')
+        Note over DB: UNIQUE(user_id, active_course_id) : les lignes<br/>'cancelled' valent NULL sur active_course_id,<br/>donc une réinscription après annulation n'entre<br/>jamais en conflit avec l'ancienne ligne annulée.
         DB-->>B: insertId: 42
         B-->>F: 201 { id: 42, status: 'pending' }
         F-->>E: "Réservation créée"
     end
 ```
+
+**Important** : contrairement à une version antérieure de ce diagramme, le contrôle anti-doublon n'est **pas** réalisé en laissant l'`INSERT` échouer sur une contrainte `UNIQUE` (`ER_DUP_ENTRY`) — il est fait **avant**, via un `SELECT` explicite (`bookingsRepository.findActiveByUserAndCourse`). La contrainte `UNIQUE(user_id, active_course_id)` au niveau SQL n'est qu'un filet de sécurité (double défense, cf. §1.4) : en usage normal via l'API, elle ne devrait jamais être déclenchée.
 
 ---
 
@@ -293,7 +296,7 @@ sequenceDiagram
         F->>F: window.location.assign(url)
         E->>S: Page Stripe Checkout (carte, 3DS)
         S-->>E: Redirige vers STRIPE_SUCCESS_URL
-        Note over B,DB: ⚠️ webhook Stripe à implémenter<br/>pour confirmer côté serveur
+        Note over B,DB: La confirmation réelle ne vient PAS de ce<br/>retour navigateur (peu fiable) mais du webhook<br/>POST /api/payments/webhook, cf. diagramme ci-dessous.
     else STRIPE_SECRET_KEY absent (mock)
         B-->>F: 503 "Stripe non configure"
         F->>B: POST /api/payments<br/>{ bookingId } (fallback mock)
@@ -305,6 +308,45 @@ sequenceDiagram
         F-->>E: Affiche "Confirme" + lien visio
     end
 ```
+
+### 5.1. Confirmation asynchrone par webhook (chemin Stripe réel)
+
+Le diagramme ci-dessus montre la création de la session, mais **la confirmation du paiement et le passage de la réservation en `confirmed` se font ailleurs**, via le webhook Stripe — jamais via la redirection du navigateur de l'élève (`STRIPE_SUCCESS_URL`), qui n'est qu'un confort d'affichage et n'est pas fiable (l'élève peut fermer l'onglet avant d'y revenir).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as Stripe
+    participant B as Backend<br/>POST /api/payments/webhook
+    participant DB as MySQL
+
+    S->>B: checkout.session.completed<br/>(signature stripe-signature, body brut)
+    B->>B: verifyWebhookEvent(rawBody, signature)<br/>via STRIPE_WEBHOOK_SECRET
+    alt signature invalide
+        B-->>S: 400 { error }
+    else signature valide
+        B->>B: bookingId = Number(session.metadata.bookingId)
+        B->>DB: SELECT * FROM bookings WHERE id = ?
+        alt booking introuvable
+            B-->>S: 200 { received: true, ignored }
+            Note over B,S: 200 volontaire : évite que Stripe<br/>retente l'event pendant 3 jours pour rien.
+        else booking déjà confirmed (idempotence)
+            B-->>S: 200 { received: true }
+            Note over B,DB: Rejoué sans effet si Stripe<br/>renvoie le même event 2 fois.
+        else booking pending
+            B->>DB: INSERT INTO payments<br/>(booking_id, amount, 'paid', NOW())
+            B->>DB: UPDATE bookings SET status='confirmed'
+            B-->>S: 200 { received: true }
+        end
+    end
+```
+
+**Points clés de robustesse** (déjà implémentés dans `paymentsActions.webhook`) :
+
+- **Signature vérifiée** avant tout traitement (`client.webhooks.constructEvent`) → impossible de confirmer un paiement en forgeant une requête HTTP directe vers `/api/payments/webhook`.
+- **Idempotence** : si `booking.status` est déjà `'confirmed'`, l'event est ignoré sans ré-insérer de paiement — indispensable car Stripe peut renvoyer le même event plusieurs fois (réseau, retries).
+- **Toujours répondre `200`** côté backend une fois l'event reçu et compris (même s'il est ignoré), sinon Stripe considère l'envoi en échec et réessaie pendant 3 jours.
+- **`bookingId` lu depuis `session.metadata`**, jamais depuis le corps envoyé par le navigateur — seule la session Stripe, créée côté serveur avec le vrai prix (`course.price`), fait foi.
 
 ---
 
@@ -461,12 +503,16 @@ gitGraph
 ```mermaid
 stateDiagram-v2
     [*] --> pending: POST /bookings<br/>(règle J-7 OK)
-    pending --> confirmed: paiement réussi<br/>(mock ou Stripe)
-    pending --> cancelled: DELETE /bookings/:id<br/>(élève annule)
-    confirmed --> cancelled: DELETE /bookings/:id<br/>(remboursement à prévoir)
+    pending --> confirmed: paiement réussi<br/>(mock, webhook Stripe,<br/>ou PUT admin manuel)
+    pending --> cancelled: DELETE /bookings/:id<br/>(élève ou admin annule)
+    confirmed --> cancelled: DELETE /bookings/:id<br/>(élève ou admin annule —<br/>⚠️ ne rembourse PAS<br/>automatiquement, voir note)
+    confirmed --> pending: PUT /bookings/:id<br/>(admin, ex. après un<br/>remboursement manuel)
+    cancelled --> pending: PUT /bookings/:id<br/>(admin, pour permettre<br/>une réinscription/re-paiement)
     cancelled --> [*]
     confirmed --> [*]: cours passé
 ```
+
+**⚠️ Point de vigilance (comportement réel, pas un bug de schéma mais une limite applicative à connaître)** : `PUT /api/bookings/:id` (`bookingsActions.editStatus`) ne vérifie **aucune** transition — n'importe quel statut peut être fixé par un admin à n'importe quel moment, y compris `cancelled → confirmed` sans paiement. C'est **volontaire** (cf. commentaire du code : "rebasculer en confirmed après un paiement effectué hors ligne, ou remettre en pending pour relancer le paiement"), mais ça veut dire que la RG6 ("confirmed uniquement après un paiement réussi") n'est garantie que pour le flux élève normal, pas face à une action admin mal utilisée. De même, annuler (`DELETE`) une réservation `confirmed` **ne crée aucun remboursement automatique** dans `payments` : la ligne `payments` reste `status='paid'`, il faut que l'admin déclenche explicitement `PUT /api/payments/:id/refund` pour la marquer `refunded`. Les deux tables peuvent donc rester temporairement incohérentes (`booking.status='cancelled'` alors que son dernier `payment.status='paid'`) tant que cette action manuelle n'a pas été faite — ce n'est pas empêché au niveau SQL par choix (un trigger forcerait une complexité jugée disproportionnée pour ce projet), mais c'est important de le savoir en tant que développeur reprenant le projet.
 
 ---
 
