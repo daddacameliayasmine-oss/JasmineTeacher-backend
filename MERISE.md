@@ -16,7 +16,9 @@ Représentation des **entités** métier et de leurs **associations**, indépend
 
 ![MCD Jasmine Teacher — notation Merise classique](docs/schemas/schema-mcd-merise-classique.png)
 
-C'est **ce diagramme qui fait foi** pour l'évaluation Merise : entités en rectangle avec leur **identifiant souligné** (`id_utilisateur`, `id_cours`, `id_reservation`, `id_paiement`), associations en ovale nommées par un verbe, et cardinalités `(min,max)` écrites en toutes lettres sur chaque branche — conformément à la notation enseignée en cours (pas la notation "crow's foot"/patte de corbeau, qui est une convention différente, utilisée plus bas uniquement comme vue complémentaire lisible nativement sur GitHub).
+C'est **ce diagramme qui fait foi** pour l'évaluation Merise : entités en rectangle avec leur **identifiant souligné** (`id_utilisateur`, `id_cours`, `id_reservation`, `id_paiement`, `id_video`, `id_message`), associations en ovale nommées par un verbe, et cardinalités `(min,max)` écrites en toutes lettres sur chaque branche — conformément à la notation enseignée en cours (pas la notation "crow's foot"/patte de corbeau, qui est une convention différente, utilisée plus bas uniquement comme vue complémentaire lisible nativement sur GitHub).
+
+Les **6 entités** du domaine sont représentées, y compris `id_video` (VIDÉO) et `id_message` (MESSAGE_CONTACT) encadrées à part : ce sont les deux seules entités **sans association** avec le reste du modèle, volontairement (une vidéo n'est pas tracée par élève/cours, un message de contact peut venir d'un visiteur non inscrit) — détail complet en `SCHEMAS.md` §1.3.
 
 Pour comprendre en détail comment lire chaque cardinalité et pourquoi elle a cette valeur précise, voir la section suivante puis le tableau "Cardinalités Merise".
 
@@ -121,6 +123,8 @@ Ces deux bornes ont chacune une **conséquence concrète sur l'implémentation p
 
 Chaque attribut du MCD, avec son type, sa taille, son caractère obligatoire et sa description — livrable académique classique en complément du MCD.
 
+> Note méthodologique : les lignes marquées **(FK)** (ex. `COURS | id_utilisateur (createur)`) ne sont **pas**, au sens strict du MCD, des attributs propres à l'entité — une clé étrangère n'existe formellement qu'à partir du MLD (§2), elle matérialise une association déjà représentée par un verbe dans le MCD (§1.0). Elles sont incluses ici par commodité de traçabilité (pour lire d'un coup d'œil quelle entité référence quelle autre), pas comme un attribut conceptuel au sens Merise.
+
 | Entité | Attribut | Type | Taille / Format | Obligatoire | Description |
 |---|---|---|---|---|---|
 | UTILISATEUR | id_utilisateur | Entier (auto-incrément) | — | Oui | Identifiant unique de l'utilisateur |
@@ -175,6 +179,30 @@ Aucune table de liaison N-N n'est nécessaire : toutes les associations du MCD s
 ## 2. MLD — Modèle Logique de Données
 
 Transformation du MCD en **schéma relationnel**. Chaque entité devient une table ; chaque association `(0,N) — (1,1)` migre la clé via une FK.
+
+### 2.1. Notation standard (formalisme textuel exigé par le cursus)
+
+![Schéma relationnel du MLD](docs/schemas/schema-mld.png)
+
+Le MLD se présente de deux façons complémentaires, **sans jamais indiquer de type SQL ni de contrainte physique** (`VARCHAR`, `CHECK`, `ON DELETE`… relèvent du MPD, §3) :
+
+1. **Schéma relationnel** (image ci-dessus) : chaque table en rectangle, sa clé primaire `id` soulignée, ses clés étrangères préfixées `#`, reliées par des flèches vers la table référencée (flèche pointillée pour `payments.#booking_id`, seule FK nullable du schéma).
+2. **Formalisme textuel** : `TABLE(clé_primaire, attribut1, …, #clé_étrangère)` — la **clé primaire est soulignée**, une **clé étrangère est préfixée par `#`**. C'est le formalisme Merise compact vu en cours, à ne pas confondre avec la vue détaillée §2.2 ci-dessous (qui ajoute les types SQL et contraintes pour servir de pont direct vers le MPD).
+
+- USERS(<u>id</u>, lastname, firstname, email, password_hash, role, created_at)
+- COURSES(<u>id</u>, title, description, type, price, capacity, start_at, duration_minutes, visio_url, **#created_by**)
+- BOOKINGS(<u>id</u>, **#user_id**, **#course_id**, status, created_at, active_course_id)
+- PAYMENTS(<u>id</u>, **#booking_id**, amount, status, paid_at)
+- VIDEOS(<u>id</u>, title, url, is_public, created_at)
+- CONTACT_MESSAGES(<u>id</u>, email, message, created_at)
+
+Remarques directement issues de la transformation MCD → MLD (cf. §1.2 "rôle des cardinalités") :
+
+- Chaque FK vient du côté `(1,1)` de son association (`#created_by` dans COURSES car COURS est `(1,1)` côté `UTILISATEUR — crée — COURS`, etc.) — voir §1.3 "Cardinalités Merise" pour la justification détaillée de chaque FK.
+- **`#booking_id` dans PAYMENTS est la seule FK qui ne suit pas la règle stricte** "FK ⇒ NOT NULL" : elle est nullable, car PAIEMENT est en réalité `(0,1)` côté réservation (pas `(1,1)`), cf. §1.3 ligne 4 et §7.
+- `active_course_id` (BOOKINGS) n'est pas un attribut MCD d'origine : c'est une colonne **dérivée** (calculée depuis `status` et `course_id`) introduite uniquement au MPD pour implémenter la RG4 ("pas 2 réservations actives sur le même cours") via une contrainte `UNIQUE(user_id, active_course_id)` — voir §3 et §7 pour le détail technique.
+
+### 2.2. Vue détaillée (types et contraintes)
 
 ```text
 USERS (
