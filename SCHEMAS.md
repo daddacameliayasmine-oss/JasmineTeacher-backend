@@ -3,6 +3,8 @@
 Tous les schémas du projet en **Mermaid** (rendu natif par GitHub). Ouvre ce fichier directement sur GitHub pour voir les diagrammes ; en local, n'importe quel rendu Markdown qui supporte Mermaid (VS Code + extension, Typora, Obsidian…) les affichera.
 
 > ⚠️ **Note de révision (2026-11-05, deux passes)** : ce document a été audité intégralement et corrigé. Les diagrammes ci-dessous reflètent maintenant exactement `database.sql`. Détail des trois premières corrections en §1.5 ; détail de la correction suivante (suppression cours/utilisateur ne doit jamais détruire un paiement) en §1.6.
+>
+> 📌 Ce fichier documente le **MPD** (schéma physique). Le **MCD en notation Merise classique** (ovales, cardinalités en toutes lettres, identifiants soulignés), le **dictionnaire de données** et les **règles de gestion** sont dans `MERISE.md` §1.
 
 ---
 

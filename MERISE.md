@@ -4,13 +4,23 @@ Application de la méthode **Merise** au projet, en 3 niveaux : MCD → MLD → 
 
 > Note : la conception réelle a été faite directement en MPD (dans `database.sql`). Ce document **rétroconstruit** les niveaux supérieurs à partir du physique pour respecter la méthodologie.
 
-> ⚠️ **Révision du 2026-11-05** (deux passes) : audit complet du document contre `database.sql` et le code des modules backend. Première passe : erreur de cardinalité corrigée (association RÉSERVATION—PAIEMENT), clé `UNIQUE` des réservations corrigée, politique de suppression `created_by` corrigée. Seconde passe (suite à une question directe) : `payments.booking_id` passé en nullable/`ON DELETE SET NULL` pour que la suppression d'un cours ou d'un utilisateur ne détruise plus jamais l'historique des paiements. Voir §7 "Historique des corrections" pour le détail complet.
+> ⚠️ **Révision du 2026-11-05** (trois passes) : audit complet du document contre `database.sql` et le code des modules backend. Passe 1 : erreur de cardinalité corrigée (association RÉSERVATION—PAIEMENT), clé `UNIQUE` des réservations corrigée, politique de suppression `created_by` corrigée. Passe 2 : `payments.booking_id` passé en nullable/`ON DELETE SET NULL` pour que la suppression d'un cours ou d'un utilisateur ne détruise plus jamais l'historique des paiements. Passe 3 (audit des livrables académiques Merise) : ajout du MCD en **notation Merise classique** (image, identifiants soulignés, cardinalités en toutes lettres), ajout du **dictionnaire de données**, précision sur la **normalisation**, complément de la correspondance User Stories. Voir §7 "Historique des corrections" pour le détail complet.
 
 ---
 
 ## 1. MCD — Modèle Conceptuel de Données
 
 Représentation des **entités** métier et de leurs **associations**, indépendamment de l'implémentation.
+
+### 1.0. MCD officiel (notation Merise classique, exigée par le cursus)
+
+![MCD Jasmine Teacher — notation Merise classique](docs/schemas/schema-mcd-merise-classique.png)
+
+C'est **ce diagramme qui fait foi** pour l'évaluation Merise : entités en rectangle avec leur **identifiant souligné** (`id_utilisateur`, `id_cours`, `id_reservation`, `id_paiement`), associations en ovale nommées par un verbe, et cardinalités `(min,max)` écrites en toutes lettres sur chaque branche — conformément à la notation enseignée en cours (pas la notation "crow's foot"/patte de corbeau, qui est une convention différente, utilisée plus bas uniquement comme vue complémentaire lisible nativement sur GitHub).
+
+Pour comprendre en détail comment lire chaque cardinalité et pourquoi elle a cette valeur précise, voir la section suivante puis le tableau "Cardinalités Merise".
+
+### 1.1. Vue alternative (notation crow's foot, rendu natif GitHub)
 
 ```mermaid
 erDiagram
@@ -20,51 +30,57 @@ erDiagram
     RÉSERVATION ||--o{ PAIEMENT : "génère (0 à N au fil du temps)"
 
     UTILISATEUR {
-        nom string
-        prénom string
-        email string
-        mot_de_passe string
-        rôle enum
-        date_création datetime
+        int id_utilisateur PK
+        string nom
+        string prénom
+        string email
+        string mot_de_passe
+        enum rôle
+        datetime date_création
     }
 
     COURS {
-        titre string
-        description text
-        type enum
-        prix decimal
-        capacité int
-        date_début datetime
-        durée_minutes int
-        url_visio string
+        int id_cours PK
+        string titre
+        text description
+        enum type
+        decimal prix
+        int capacité
+        datetime date_début
+        int durée_minutes
+        string url_visio
     }
 
     RÉSERVATION {
-        statut enum
-        date_création datetime
+        int id_reservation PK
+        enum statut
+        datetime date_création
     }
 
     PAIEMENT {
-        montant decimal
-        statut enum
-        date_paiement datetime
+        int id_paiement PK
+        decimal montant
+        enum statut
+        datetime date_paiement
     }
 
     VIDÉO {
-        titre string
-        url string
-        publique bool
-        date_création datetime
+        int id_video PK
+        string titre
+        string url
+        bool publique
+        datetime date_création
     }
 
     MESSAGE_CONTACT {
-        email string
-        contenu text
-        date_envoi datetime
+        int id_message PK
+        string email
+        text contenu
+        datetime date_envoi
     }
 ```
 
-### Le rôle des cardinalités en Merise (rappel méthodologique)
+### 1.2. Le rôle des cardinalités en Merise (rappel méthodologique)
 
 Une cardinalité Merise se note `(min, max)` et s'attache **à une entité, pour une association donnée, vue du côté de l'autre entité**. Elle répond à deux questions distinctes :
 
@@ -78,7 +94,7 @@ Ces deux bornes ont chacune une **conséquence concrète sur l'implémentation p
 
 **Autrement dit** : lire une cardinalité ne sert pas qu'à dessiner un joli diagramme — chaque borne se traduit directement en une décision SQL vérifiable (`NOT NULL` ou pas, FK côté table A ou B, contrainte `UNIQUE` ou pas). Une cardinalité mal choisie ou mal transcrite peut donc rendre le schéma incohérent avec les règles de gestion qu'il est censé représenter — c'est exactement l'erreur qui a été trouvée et corrigée ici sur l'association RÉSERVATION—PAIEMENT (voir ligne 4 du tableau et §7).
 
-### Cardinalités Merise
+### 1.3. Cardinalités Merise
 
 | Association | Côté A (lecture) | Côté B (lecture) | Détail complet |
 |---|---|---|---|
@@ -87,7 +103,7 @@ Ces deux bornes ont chacune une **conséquence concrète sur l'implémentation p
 | `COURS — concerne — RÉSERVATION` | COURS : (0,N) | RÉSERVATION : (1,1) | **Côté COURS = (0,N)** : un cours peut n'avoir encore aucune réservation (vient d'être créé), jusqu'à `capacity` réservations actives (règle RG3, appliquée en applicatif, pas en SQL — voir `SCHEMAS.md` §1.4). **Côté RÉSERVATION = (1,1)** : une réservation porte toujours sur exactement un cours, qui ne change jamais. → FK `bookings.course_id NOT NULL`. |
 | `RÉSERVATION — génère — PAIEMENT` | RÉSERVATION : (0,**N**) | PAIEMENT : (0,1) | **❌ Ancienne version de ce document (corrigée deux fois) : `(0,1)` côté RÉSERVATION, puis `(1,1)` côté PAIEMENT.** Erreur n°1 (corrigée le 2026-11-05) : le code (`paymentsActions.refund` + `bookingsActions.editStatus`, qui permet à un admin de repasser une réservation remboursée en `pending` pour qu'elle soit repayée) autorise explicitement **plusieurs** paiements successifs pour la **même** réservation au fil de sa vie (un paiement initial, un remboursement, un second paiement) → **côté RÉSERVATION = (0,N)**. Erreur n°2 (corrigée le même jour, voir §7) : on supposait qu'un paiement reste *toujours* rattaché à sa réservation d'origine (`(1,1)`), mais `DELETE /api/courses/:id` et `DELETE /api/users/:id` peuvent faire disparaître cette réservation (cascade volontaire) — dans ce cas le paiement doit **survivre** comme trace financière plutôt que d'être détruit avec elle. **Côté PAIEMENT = (0,1)** : un paiement est rattaché à **au plus une** réservation, et peut n'en avoir **aucune** (`booking_id NULL`) si celle-ci a été supprimée depuis. → FK `payments.booking_id` **nullable**, `ON DELETE SET NULL` (et non `CASCADE`), toujours **sans** contrainte `UNIQUE` (une `UNIQUE(booking_id)` casserait le flux de re-paiement réel — voir `SCHEMAS.md` §1.5/§1.6 et §7 ci-dessous). |
 
-### Règles de gestion (RG)
+### 1.4. Règles de gestion (RG)
 
 | RG | Énoncé |
 |---|---|
@@ -100,6 +116,59 @@ Ces deux bornes ont chacune une **conséquence concrète sur l'implémentation p
 | RG7 | Une vidéo `is_public=false` n'est accessible qu'aux utilisateurs connectés. |
 | RG8 | *(nouvelle, rendue explicite par la correction du §7)* Une réservation peut déclencher **plusieurs** paiements successifs dans le temps (paiement → remboursement → nouveau paiement), mais jamais deux paiements `status='paid'` simultanément actifs sans remboursement entre les deux — cette dernière contrainte n'est **pas** enforcée en SQL (ce serait un trigger), elle dépend de la discipline du flux admin (`refund` avant de réouvrir en `pending`). |
 | RG9 | *(nouvelle)* Un utilisateur ne peut pas être supprimé (`DELETE /api/users/:id`) tant qu'il reste des cours dont il est le créateur (`courses.created_by`) — il faut d'abord réassigner ou supprimer ces cours. Protège l'historique des réservations et paiements liés contre une suppression en cascade involontaire. |
+
+### 1.5. Dictionnaire de données
+
+Chaque attribut du MCD, avec son type, sa taille, son caractère obligatoire et sa description — livrable académique classique en complément du MCD.
+
+| Entité | Attribut | Type | Taille / Format | Obligatoire | Description |
+|---|---|---|---|---|---|
+| UTILISATEUR | id_utilisateur | Entier (auto-incrément) | — | Oui | Identifiant unique de l'utilisateur |
+| UTILISATEUR | nom | Chaîne de caractères | 100 | Oui | Nom de famille |
+| UTILISATEUR | prenom | Chaîne de caractères | 100 | Oui | Prénom |
+| UTILISATEUR | email | Chaîne de caractères | 255 | Oui | Adresse email, unique, sert d'identifiant de connexion |
+| UTILISATEUR | mot_de_passe | Chaîne de caractères (hash) | 255 | Oui | Hash bcrypt du mot de passe, jamais stocké en clair |
+| UTILISATEUR | role | Énuméré | `student` \| `admin` | Oui | Rôle applicatif, détermine les droits (RG1) |
+| UTILISATEUR | date_creation | Date et heure | — | Oui (auto) | Horodatage de création du compte |
+| COURS | id_cours | Entier (auto-incrément) | — | Oui | Identifiant unique du cours |
+| COURS | titre | Chaîne de caractères | 200 | Oui | Nom du cours affiché aux élèves |
+| COURS | description | Texte long | illimité | Non | Description détaillée du cours |
+| COURS | type | Énuméré | 4 valeurs (collectif, individuel, enfant_collectif, enfant_individuel) | Oui | Catégorie tarifaire/pédagogique du cours |
+| COURS | prix | Décimal | 6 chiffres, 2 décimales | Oui | Prix en euros, toujours ≥ 0 |
+| COURS | capacite | Entier | — | Oui | Nombre maximum de réservations actives (RG3), toujours ≥ 1 |
+| COURS | date_debut | Date et heure | — | Oui | Date/heure de la session, doit être à J+7 minimum d'une réservation (RG2) |
+| COURS | duree_minutes | Entier | — | Oui | Durée du cours en minutes, toujours ≥ 15 |
+| COURS | url_visio | Chaîne de caractères | 500 | Non | Lien de la session de visioconférence |
+| COURS | id_utilisateur (createur) | Entier (FK) | — | Oui | Référence l'admin créateur du cours |
+| RÉSERVATION | id_reservation | Entier (auto-incrément) | — | Oui | Identifiant unique de la réservation |
+| RÉSERVATION | statut | Énuméré | `pending` \| `confirmed` \| `cancelled` | Oui | État du cycle de vie de la réservation |
+| RÉSERVATION | date_creation | Date et heure | — | Oui (auto) | Horodatage de la réservation |
+| RÉSERVATION | id_utilisateur | Entier (FK) | — | Oui | Référence l'élève qui réserve |
+| RÉSERVATION | id_cours | Entier (FK) | — | Oui | Référence le cours réservé |
+| PAIEMENT | id_paiement | Entier (auto-incrément) | — | Oui | Identifiant unique du paiement |
+| PAIEMENT | montant | Décimal | 6 chiffres, 2 décimales | Oui | Montant payé en euros, toujours ≥ 0, recalculé côté serveur (RG5) |
+| PAIEMENT | statut | Énuméré | `pending` \| `paid` \| `refunded` | Oui | État du paiement |
+| PAIEMENT | date_paiement | Date et heure | — | Non | Date effective du paiement |
+| PAIEMENT | id_reservation | Entier (FK, nullable) | — | Non | Référence la réservation payée ; peut être vide si la réservation a été supprimée (voir §7) |
+| VIDÉO | id_video | Entier (auto-incrément) | — | Oui | Identifiant unique de la vidéo |
+| VIDÉO | titre | Chaîne de caractères | 200 | Oui | Titre affiché |
+| VIDÉO | url | Chaîne de caractères | 500 | Oui | Lien vers le fichier/flux vidéo |
+| VIDÉO | publique | Booléen | — | Oui | `true` = visible par les visiteurs, `false` = réservé aux connectés (RG7) |
+| VIDÉO | date_creation | Date et heure | — | Oui (auto) | Horodatage d'ajout |
+| MESSAGE_CONTACT | id_message | Entier (auto-incrément) | — | Oui | Identifiant unique du message |
+| MESSAGE_CONTACT | email | Chaîne de caractères | 255 | Non | Email du visiteur, facultatif (peut être non connecté) |
+| MESSAGE_CONTACT | contenu | Texte long | illimité | Oui | Corps du message |
+| MESSAGE_CONTACT | date_envoi | Date et heure | — | Oui (auto) | Horodatage d'envoi |
+
+### 1.6. Normalisation
+
+Le modèle respecte les trois premières formes normales :
+
+- **1FN (atomicité)** : chaque attribut est atomique (pas de liste ni de valeur composite dans une même colonne — ex. `nom`/`prenom` sont séparés, pas de champ `nom_complet`).
+- **2FN (dépendance pleine à la clé)** : chaque entité a une clé primaire simple (`id_x`), donc aucune dépendance partielle n'est possible (la 2FN n'est un risque qu'avec des clés composites).
+- **3FN (pas de dépendance transitive)** : aucun attribut non-clé ne dépend d'un autre attribut non-clé. Exemple vérifié : `payments.amount` n'est pas recalculable depuis `courses.price` par une FK transitive silencieuse — c'est une valeur **figée au moment du paiement** (RG5), volontairement dupliquée pour conserver l'historique même si le prix du cours change ensuite. Ce n'est pas une violation de 3FN : c'est un attribut propre à l'entité PAIEMENT (le montant réellement payé), pas une redondance du prix du cours.
+
+Aucune table de liaison N-N n'est nécessaire : toutes les associations du MCD sont binaires avec un côté `(1,1)` ou `(0,1)`, qui porte naturellement la clé étrangère (cf. §1.2).
 
 ---
 
@@ -282,16 +351,23 @@ Chaque table du MPD a un module backend complet selon le pattern Action / Reposi
 
 | US (cf `infos/User Stories.pdf`) | Niveau touché | Opération MPD |
 |---|---|---|
+| US1 Visiteur consulte les cours proposés | COURS | `SELECT FROM courses` |
+| US2 Visiteur voit les tarifs | COURS | `SELECT FROM courses` (champ `price`) |
 | US3 Visiteur crée un compte | UTILISATEUR | `INSERT INTO users` |
+| US4 Visiteur regarde des vidéos de démonstration | VIDÉO | `SELECT FROM videos WHERE is_public=true` |
 | US5 Élève se connecte | UTILISATEUR | `SELECT FROM users WHERE email` + bcrypt verify |
 | US6 Élève réserve un cours | RÉSERVATION (+ vérif COURS) | `INSERT INTO bookings` après contrôle RG2/RG3/RG4 |
 | US7 Élève paie un cours | PAIEMENT (+ MAJ RÉSERVATION) | `INSERT INTO payments` + `UPDATE bookings SET status='confirmed'` |
-| US10 Élève annule | RÉSERVATION | `UPDATE bookings SET status='cancelled'` |
+| US8 Élève accède à ses cours en visio | COURS (via RÉSERVATION) | `SELECT FROM bookings JOIN courses` (champ `visio_url`), accès restreint aux bookings `confirmed` de l'élève connecté |
+| US9 Élève voit son historique de cours | RÉSERVATION (+ COURS) | `GET /api/bookings/me` → `findByUserWithCourse` (`SELECT bookings JOIN courses WHERE user_id = ?`) — ⚠️ voir point de vigilance ci-dessous |
+| US10 Élève annule une réservation | RÉSERVATION | `UPDATE bookings SET status='cancelled'` (jamais de `DELETE`, voir `SCHEMAS.md` §1.6) |
 | US11 Admin crée un cours | COURS | `INSERT INTO courses` |
-| US12 Admin modifie/supprime | COURS | `UPDATE courses` / `DELETE FROM courses` |
+| US12 Admin modifie/supprime un cours | COURS | `UPDATE courses` / `DELETE FROM courses` |
 | US13 Admin liste les élèves | UTILISATEUR | `SELECT FROM users` (sans password_hash) |
 | US14 Admin gère paiements | PAIEMENT | `SELECT FROM payments` + refund |
 | US15 Admin ajoute une vidéo | VIDÉO | `INSERT INTO videos` |
+
+**⚠️ Point de vigilance identifié sur US9** : l'historique (`GET /bookings/me`) dépend des lignes `bookings` existantes. Si un admin supprime un **cours** passé (`DELETE /api/courses/:id`), les réservations de tous les élèves sur ce cours disparaissent par `CASCADE` (comportement voulu, cf. `SCHEMAS.md` §1.6) — et donc **cette session disparaît aussi de l'historique de l'élève**, ce qui peut contredire l'intention de l'US9 ("suivre ma progression"). Ce n'est pas un bug du schéma : c'est une conséquence assumée de la cascade `bookings.course_id`. Si l'historique doit survivre à la suppression du cours, il faudrait soit (a) ne jamais supprimer physiquement un cours passé (`DELETE` réservé aux cours futurs, remplacer par un champ `archived` pour les cours passés), soit (b) dupliquer les informations utiles du cours (titre, date) directement sur la ligne `bookings` au moment de la réservation. Aucune des deux n'a été implémentée : signalé ici pour une décision produit future, hors périmètre de cet audit.
 
 ---
 
@@ -342,6 +418,7 @@ Ce document (et `SCHEMAS.md`) a été relu intégralement et comparé à `databa
 | 5 | *(documentation)* `SCHEMAS.md` §4 documentait le contrôle anti-doublon comme géré par un `ER_DUP_ENTRY` sur `INSERT`, alors que le code le fait via un `SELECT` explicite **avant** l'insertion. | `SCHEMAS.md` §4 | Diagramme de séquence corrigé pour refléter l'ordre réel des vérifications (date → doublon actif → capacité → insertion). | Un diagramme de séquence qui ne correspond pas au code induit en erreur quiconque l'utilise pour comprendre ou modifier le flux de réservation. |
 | 6 | *(documentation)* `SCHEMAS.md` §5 affirmait encore "webhook Stripe à implémenter", alors que `paymentsActions.webhook` est pleinement implémenté (signature vérifiée, idempotence, `metadata.bookingId`). | `SCHEMAS.md` §5 | Note remplacée par un diagramme de séquence dédié au webhook, avec les garanties de robustesse déjà en place. | Une note "à faire" obsolète fait perdre du temps à qui la lit en pensant qu'une fonctionnalité critique de sécurité des paiements manque encore. |
 | 7 | *(bug confirmé, trouvé suite à une question directe le 2026-11-05)* `DELETE /api/courses/:id` et `DELETE /api/users/:id` n'ont aucune vérification ; `payments.booking_id` était en `ON DELETE CASCADE` → supprimer un cours ou un compte élève effaçait silencieusement, en cascade, **les paiements déjà encaissés** liés à ses réservations, sans confirmation ni trace. | `database.sql`, `paymentsRepository.ts`, `paymentsActions.ts`, répercuté dans `MERISE.md` §1/§2/§3 et `SCHEMAS.md` §1 | `payments.booking_id` passe de `NOT NULL`/`CASCADE` à **nullable**/`ON DELETE SET NULL` : la cascade sur `bookings` (courses/users) reste **voulue**, mais le paiement survit désormais avec `booking_id = NULL` au lieu d'être détruit. `paymentsActions.refund` mis à jour pour gérer ce cas. Vérifié empiriquement (Docker). | Une suppression de cours ou de compte élève est une opération admin courante et non bloquante par choix produit — elle ne doit jamais, comme simple effet de bord, effacer un historique financier/comptable. |
+| 8 | *(audit des livrables académiques Merise, 2026-11-05)* Le MCD n'était dessiné qu'en notation "crow's foot" (patte de corbeau), pas dans la notation Merise classique (ovales + cardinalités en toutes lettres) exigée par le cursus ; aucun attribut identifiant n'était représenté dans les entités ; aucun dictionnaire de données n'existait ; la normalisation (1FN/2FN/3FN) n'était pas justifiée explicitement ; 5 User Stories (US1, US2, US4, US8, US9) étaient absentes du tableau de correspondance §5. | `MERISE.md` §1, §5 | Ajout d'un MCD en notation Merise classique avec identifiants soulignés (`docs/schemas/schema-mcd-merise-classique.png`), ajout du §1.5 "Dictionnaire de données" (un tableau attribut → type → taille → obligatoire → description par table), ajout du §1.6 "Normalisation" (justification 1FN/2FN/3FN), complément du tableau §5 avec les 5 US manquantes et un point de vigilance sur US9. | Un MCD en notation crow's foot et sans identifiants, un dictionnaire de données absent, et une couverture User Stories incomplète sont des manques typiques évalués en cursus Merise — indépendamment de la correction du SQL, qui était déjà bonne. |
 
 **Ce qui n'a volontairement PAS été changé**, pour rester dans le périmètre strict des schémas/cardinalités et ne pas introduire de régression non demandée :
 
